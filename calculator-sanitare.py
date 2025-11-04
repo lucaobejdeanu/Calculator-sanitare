@@ -941,7 +941,7 @@ else:
 # Footer
 st.divider()
 st.caption("""
-**Calculator Instalații Sanitare v5.0 Pro** | Conform I9-2022  
-✅ Presiuni minime automate | ✅ Pierderi standardizate | ✅ 6 materiale | ✅ Sistem progresiv  
-© 2024 - Pentru ingineri ISC 🇷🇴
+**Calculator Instalații Sanitare Pro** | Conform I9-2022  
+✅ Presiuni minime automate | ✅ Pierderi standardizate 
+© Designed by Luca OBEJDEANU
 """)
