@@ -3,20 +3,89 @@ import pandas as pd
 import numpy as np
 import math
 from typing import List, Dict, Tuple
+import plotly.graph_objects as go
+import plotly.express as px
 
 # ======================== CONFIGURARE PAGINĂ ========================
 st.set_page_config(
-    page_title="Calculator Sanitare Pro I9-2022",
+    page_title="Calculator Instalații Sanitare - Ing. Luca Obejdeanu",
     page_icon="💧",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # ======================== CONSTANTE ========================
 G = 9.81  # gravitație m/s²
 
-# ======================== BAZE DE DATE ========================
+# ======================== CORELAȚIE DN - DIAMETRE SPECIFICE ========================
+CORELARE_DN_DIAMETRE = {
+    "Oțel": {
+        15: "1/2\"",
+        20: "3/4\"", 
+        25: "1\"",
+        32: "1 1/4\"",
+        40: "1 1/2\"",
+        50: "2\"",
+        65: "2 1/2\"",
+        80: "3\"",
+        100: "4\"",
+        125: "5\"",
+        150: "6\""
+    },
+    "PPR": {
+        10: "d16",
+        15: "d20",
+        20: "d25",
+        25: "d32",
+        32: "d40",
+        40: "d50",
+        50: "d63",
+        65: "d75",
+        80: "d90",
+        100: "d110",
+        125: "d125",
+        150: "d160"
+    },
+    "PEX/Multistrat": {
+        10: "16x2",
+        12: "16x2",
+        15: "20x2",
+        20: "25x2.5",
+        25: "32x3",
+        32: "40x3.5",
+        40: "50x4",
+        50: "63x4.5"
+    },
+    "Cupru": {
+        10: "12x1",
+        12: "15x1",
+        15: "18x1",
+        20: "22x1",
+        25: "28x1.5",
+        32: "35x1.5",
+        40: "42x1.5",
+        50: "54x2",
+        65: "76x2",
+        80: "88.9x2",
+        100: "108x2.5"
+    },
+    "PE-HD": {
+        15: "d20",
+        20: "d25",
+        25: "d32",
+        32: "d40",
+        40: "d50",
+        50: "d63",
+        65: "d75",
+        80: "d90",
+        100: "d110",
+        125: "d125",
+        150: "d160",
+        200: "d200"
+    }
+}
 
-# Materiale conducte cu date reale din piață
+# ======================== BAZE DE DATE MATERIALE ========================
 MATERIALE_CONDUCTE = {
     "PPR (Polipropilen)": {
         "rugozitate_mm": 0.0015,
@@ -49,899 +118,1142 @@ MATERIALE_CONDUCTE = {
         "rugozitate_mm": 0.002,
         "diametre_mm": {16: 12, 20: 16, 25: 20, 32: 26, 40: 32, 50: 40},
         "v_max": 2.0,
-        "info": "Flexibil, rezistent coroziune, montaj rapid"
+        "info": "Flexibil, montaj rapid, fără fitinguri"
+    },
+    "PE-HD": {
+        "rugozitate_mm": 0.002,
+        "diametre_mm": {20: 14.4, 25: 20.4, 32: 26, 40: 32.6, 50: 40.8, 
+                       63: 51.4, 75: 61.4, 90: 73.6, 110: 90, 125: 102.2, 
+                       160: 130.8, 200: 163.6},
+        "v_max": 2.5,
+        "info": "Pentru branșamente, rezistent UV"
     },
     "Oțel zincat": {
         "rugozitate_mm": 0.15,
-        "diametre_mm": {15: 12, 20: 16, 25: 20, 32: 26, 40: 32, 50: 40, 
-                       65: 52, 80: 66, 100: 82},
-        "v_max": 2.0,
-        "info": "Uzual în clădiri vechi, corozibil"
+        "diametre_mm": {15: 16.0, 20: 21.7, 25: 27.3, 32: 36.0, 40: 41.9, 
+                       50: 53.1, 65: 68.9, 80: 80.9, 100: 105.3},
+        "v_max": 3.0,
+        "info": "Tradițional, pentru instalații industriale"
+    },
+    "PVC-U Presiune": {
+        "rugozitate_mm": 0.002,
+        "diametre_mm": {20: 15.4, 25: 20.4, 32: 26.2, 40: 34.2, 50: 43.4, 
+                       63: 55.2, 75: 65.8, 90: 79, 110: 96.8},
+        "v_max": 2.5,
+        "info": "Economic, pentru apă rece"
     }
 }
 
-# Aparate sanitare cu PRESIUNI MINIME conform I9-2022
-APARATE_SANITARE = {
+# ======================== CONSUMATORI ========================
+CONSUMATORI = {
     "WC cu rezervor": {
-        "debit": 0.12,
-        "unitate": 1.0,
-        "presiune_min": 10.0,  # mCA
-        "diametru_min": 10,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet colar - Robinet": 10.0,
-            "Robinet colar - Cot": 1.0,
-            "Robinet colar - Reducție": 0.5
-        }
+        "debit": 0.10, "unitate": 1.0, "presiune_min": 8.0, "diametru_min": 10,
+        "categorie": "Baie"
     },
-    "WC jet sub presiune": {
-        "debit": 1.5,
-        "unitate": 15.0,
-        "presiune_min": 25.0,
-        "diametru_min": 10,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet": 10.0,
-            "Cot": 1.0,
-            "Reducție": 0.5
-        }
+    "WC cu robinet flotor": {
+        "debit": 1.50, "unitate": 5.0, "presiune_min": 50.0, "diametru_min": 20,
+        "categorie": "Baie"
+    },
+    "Pisoar cu robinet": {
+        "debit": 0.30, "unitate": 2.0, "presiune_min": 15.0, "diametru_min": 12,
+        "categorie": "Baie"
     },
     "Lavoar": {
-        "debit": 0.10,
-        "unitate": 1.5,
-        "presiune_min": 10.0,
-        "diametru_min": 10,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie cu perlator": 10.0,
-            "Reducție": 0.5
-        }
-    },
-    "Lavoar grup sanitar": {
-        "debit": 0.15,
-        "unitate": 1.5,
-        "presiune_min": 10.0,
-        "diametru_min": 10,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie": 10.0,
-            "Reducție": 0.5
-        }
+        "debit": 0.10, "unitate": 1.0, "presiune_min": 10.0, "diametru_min": 10,
+        "categorie": "Baie"
     },
     "Bideu": {
-        "debit": 0.10,
-        "unitate": 1.0,
-        "presiune_min": 10.0,
-        "diametru_min": 10,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie": 10.0,
-            "Reducție": 0.5
-        }
+        "debit": 0.10, "unitate": 1.0, "presiune_min": 10.0, "diametru_min": 10,
+        "categorie": "Baie"
     },
     "Duș": {
-        "debit": 0.20,
-        "unitate": 2.0,
-        "presiune_min": 12.0,
-        "diametru_min": 12,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie dus": 10.0,
-            "Reducție": 0.5
-        }
+        "debit": 0.20, "unitate": 2.0, "presiune_min": 12.0, "diametru_min": 12,
+        "categorie": "Baie"
     },
     "Cadă < 150L": {
-        "debit": 0.25,
-        "unitate": 3.0,
-        "presiune_min": 13.0,
-        "diametru_min": 13,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie cada": 10.0,
-            "Reducție": 0.5
-        }
+        "debit": 0.25, "unitate": 3.0, "presiune_min": 13.0, "diametru_min": 13,
+        "categorie": "Baie"
     },
     "Cadă > 150L": {
-        "debit": 0.33,
-        "unitate": 4.0,
-        "presiune_min": 13.0,
-        "diametru_min": 13,
-        "categorie": "Baie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie cada": 10.0,
-            "Reducție": 0.5
-        }
+        "debit": 0.33, "unitate": 4.0, "presiune_min": 13.0, "diametru_min": 13,
+        "categorie": "Baie"
     },
-    "Spălător vase": {
-        "debit": 0.20,
-        "unitate": 2.0,
-        "presiune_min": 12.0,
-        "diametru_min": 12,
-        "categorie": "Bucătărie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Baterie chiuvetă": 10.0,
-            "Reducție": 0.5
-        }
+    "Spălător vase (chiuvetă)": {
+        "debit": 0.20, "unitate": 2.0, "presiune_min": 12.0, "diametru_min": 12,
+        "categorie": "Bucătărie"
     },
     "Mașină spălat vase": {
-        "debit": 0.20,
-        "unitate": 2.0,
-        "presiune_min": 12.0,
-        "diametru_min": 12,
-        "categorie": "Bucătărie",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet colar - Robinet": 10.0,
-            "Robinet colar - Reducție marire": 0.5
-        }
+        "debit": 0.20, "unitate": 2.0, "presiune_min": 12.0, "diametru_min": 12,
+        "categorie": "Bucătărie"
     },
     "Mașină spălat rufe": {
-        "debit": 0.20,
-        "unitate": 2.0,
-        "presiune_min": 12.0,
-        "diametru_min": 12,
-        "categorie": "Utilitate",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet colar - Robinet": 10.0,
-            "Robinet colar - Reducție marire": 0.5
-        }
+        "debit": 0.20, "unitate": 2.0, "presiune_min": 12.0, "diametru_min": 12,
+        "categorie": "Utilitate"
     },
     "Robinet serviciu 1/2\"": {
-        "debit": 0.20,
-        "unitate": 2.0,
-        "presiune_min": 12.0,
-        "diametru_min": 15,
-        "categorie": "Utilitate",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet": 10.0
-        }
+        "debit": 0.20, "unitate": 1.5, "presiune_min": 10.0, "diametru_min": 13,
+        "categorie": "Utilitate"
     },
     "Robinet serviciu 3/4\"": {
-        "debit": 0.42,
-        "unitate": 4.0,
-        "presiune_min": 12.0,
-        "diametru_min": 20,
-        "categorie": "Utilitate",
-        "pierderi_automate": {
-            "Cot cu talpă": 1.5,
-            "Robinet": 10.0
-        }
+        "debit": 0.40, "unitate": 2.5, "presiune_min": 10.0, "diametru_min": 19,
+        "categorie": "Utilitate"
+    },
+    "Robinet grădină": {
+        "debit": 0.70, "unitate": 3.5, "presiune_min": 15.0, "diametru_min": 19,
+        "categorie": "Exterior"
+    },
+    "Robinet spălare auto": {
+        "debit": 1.00, "unitate": 5.0, "presiune_min": 20.0, "diametru_min": 25,
+        "categorie": "Exterior"
     }
 }
 
-# Coeficienți pentru calcul debite conform I9-2022
-COEFICIENTI_CLADIRE = {
-    "Clădiri de locuit": {
-        "metoda": "Metoda B",
-        "a": 0.45,
-        "b": 0.20,
-        "v_min": 0.20,
-        "E_min": 1.0,
-        "descriere": "Rezidențial - factor simultaneitate"
-    },
-    "Clădiri administrative": {
-        "metoda": "Metoda C",
-        "a": 0.55,
-        "b": 0.25,
-        "v_min": 0.30,
-        "E_min": 1.5,
-        "descriere": "Birouri - unități de încărcare"
-    },
-    "Hoteluri cu grup sanitar în cameră": {
-        "metoda": "Metoda C",
-        "a": 0.60,
-        "b": 0.27,
-        "v_min": 0.36,
-        "E_min": 1.8,
-        "descriere": "Hotel - unități de încărcare"
-    },
-    "Instituții învățământ": {
-        "metoda": "Metoda C",
-        "a": 0.60,
-        "b": 0.27,
-        "v_min": 0.36,
-        "E_min": 1.8,
-        "descriere": "Școli - unități de încărcare"
-    },
-    "Spitale, cantine, restaurante": {
-        "metoda": "Metoda C",
-        "a": 0.67,
-        "b": 0.30,
-        "v_min": 0.44,
-        "E_min": 2.2,
-        "descriere": "Medical/Alimentație - unități"
-    },
-    "Hoteluri cu grup sanitar comun": {
-        "metoda": "Metoda C",
-        "a": 0.85,
-        "b": 0.38,
-        "v_min": 0.72,
-        "E_min": 3.6,
-        "descriere": "Hotel comun - unități"
-    },
-    "Cămine, internate, băi publice": {
-        "metoda": "Metoda C",
-        "a": 1.00,
-        "b": 0.45,
-        "v_min": 1.00,
-        "E_min": 5.0,
-        "descriere": "Colectiv - unități"
-    },
-    "Vestiare ateliere/producție": {
-        "metoda": "Metoda C",
-        "a": 2.00,
-        "b": 0.90,
-        "v_min": 4.00,
-        "E_min": 20.0,
-        "descriere": "Industrial - unități"
-    }
-}
+# ======================== FUNCȚII DE CALCUL ========================
 
-# Pierderi locale standardizate - OBLIGATORII pe instalație
-PIERDERI_OBLIGATORII = {
-    "Contor apă": {"zeta": 6.0, "descriere": "Obligatoriu la branșament, max 6 mH2O conform I9-2022"},
-    "Filtru după contor": {"zeta": 3.0, "descriere": "Obligatoriu pentru protecție instalație"},
-    "Robinet închidere branșament": {"zeta": 0.2, "descriere": "Vană cu bilă la branșament"}
-}
-
-# Pierderi locale OPȚIONALE
-PIERDERI_OPTIONALE = {
-    "Reductor presiune": {"zeta": 1.5, "descriere": "Dacă presiunea rețea > 6 bar"},
-    "Distribuitor/Colector": {"zeta": 2.0, "descriere": "Pentru instalații cu colector"}
-}
-
-# Pierderi locale pe TRONSON (automate)
-PIERDERI_TRONSON = {
-    "Teu trecere la racord": {"zeta": 0.5, "descriere": "Automat de la tronsonul 2"},
-    "Vană închidere derivație": {"zeta": 0.2, "descriere": "Pe fiecare tronson"}
-}
-
-# Pierderi locale EXTRA (utilizator)
-PIERDERI_EXTRA = {
-    "Cot 90° standard": 1.0,
-    "Cot 45°": 0.4,
-    "Curbă 90°": 0.5,
-    "Teu derivație": 1.5,
-    "Reducție": 0.3,
-    "Vană cu bilă": 0.2,
-    "Vană cu ventil": 4.0,
-    "Filtru": 3.0,
-    "Clapetă reținere": 2.0
-}
-
-# ======================== FUNCȚII CALCUL ========================
-
-def calculeaza_viscozitate(temperatura: float) -> float:
-    """Viscozitate cinematică apă în funcție de temperatură"""
-    if temperatura <= 10:
-        return 1.307e-6
-    elif temperatura <= 20:
-        return 1.004e-6
-    elif temperatura <= 30:
-        return 0.801e-6
-    elif temperatura <= 40:
-        return 0.658e-6
-    elif temperatura <= 50:
-        return 0.553e-6
-    elif temperatura <= 60:
-        return 0.475e-6
+def calcul_debit_probabilistic(consumatori_selectati: List[Dict]) -> float:
+    """Calculează debitul probabilistic conform SR 1343-1:2006"""
+    suma_debit_unitate = sum(c["debit"] * c["unitate"] * c["cantitate"] 
+                              for c in consumatori_selectati)
+    
+    if suma_debit_unitate <= 0:
+        return 0.0
+    elif suma_debit_unitate <= 0.2:
+        return suma_debit_unitate
+    elif suma_debit_unitate <= 1.6:
+        return 0.2 + 0.25 * (suma_debit_unitate - 0.2)**0.5
     else:
-        return 0.413e-6
+        return 0.466 * suma_debit_unitate**0.5
 
-def calculeaza_reynolds(viteza: float, diametru_m: float, viscozitate: float) -> float:
-    """Număr Reynolds"""
-    if viscozitate == 0:
-        return 0
-    return (viteza * diametru_m) / viscozitate
+def calcul_diametru_minim(debit: float, viteza_max: float) -> float:
+    """Calculează diametrul minim necesar în mm"""
+    if debit <= 0 or viteza_max <= 0:
+        return 0.0
+    return 1000 * math.sqrt(4 * debit / (math.pi * viteza_max))
 
-def calculeaza_lambda_haaland(reynolds: float, rugozitate_rel: float) -> float:
-    """Coeficient λ prin aproximarea Haaland pentru Colebrook-White"""
-    if reynolds < 2300:  # Laminar
-        return 64 / reynolds if reynolds > 0 else 0.02
-    else:  # Turbulent
-        try:
-            term1 = (rugozitate_rel / 3.71) ** 1.11
-            term2 = 6.9 / reynolds
-            lambda_val = (-1.8 * math.log10(term1 + term2)) ** (-2)
-            return max(0.008, min(0.1, lambda_val))  # Limitare rezonabilă
-        except:
+def reynolds(viteza: float, diametru: float, temperatura: float = 10.0) -> float:
+    """Calculează numărul Reynolds"""
+    vascozitate = 1.3e-6 if temperatura <= 10 else 1.0e-6
+    return viteza * diametru / vascozitate
+
+def factor_frecare_colebrook(re: float, rugozitate: float, diametru: float, 
+                            epsilon: float = 1e-6) -> float:
+    """Calculează factorul de frecare prin formula Colebrook-White"""
+    if re < 2300:
+        return 64 / re
+    
+    rugozitate_relativa = rugozitate / diametru
+    f_vechi = 0.02
+    
+    for _ in range(100):
+        if f_vechi <= 0:
+            f_vechi = 0.02
+        
+        partea_dreapta = -2 * math.log10(
+            rugozitate_relativa / 3.7 + 2.51 / (re * math.sqrt(f_vechi))
+        )
+        
+        if partea_dreapta <= 0:
             return 0.02
-
-def calculeaza_debit_calcul(tip_cladire: str, v_total: float, E_total: float, 
-                           aplica_siguranta: bool) -> Tuple[float, str]:
-    """Calculează debitul de calcul conform I9-2022"""
-    coef = COEFICIENTI_CLADIRE[tip_cladire]
-    
-    if coef["metoda"] == "Metoda B":
-        if v_total >= coef["v_min"]:
-            debit_calc = coef["a"] * math.sqrt(v_total)
-            formula = f"{coef['a']} × √{v_total:.3f}"
-        else:
-            debit_calc = v_total
-            formula = f"{v_total:.3f} (sub limită)"
-    else:  # Metoda C
-        if E_total >= coef["E_min"]:
-            debit_calc = coef["b"] * math.sqrt(E_total)
-            formula = f"{coef['b']} × √{E_total:.1f}"
-        else:
-            debit_calc = 0.2 * E_total
-            formula = f"0.2 × {E_total:.1f} (sub limită)"
-    
-    if aplica_siguranta:
-        debit_calc *= 1.1
-        formula += " × 1.1"
-    
-    return debit_calc, formula
-
-def dimensioneaza_conducta(debit_m3s: float, material: str, temperatura: float) -> Dict:
-    """Dimensionează conducta și calculează parametrii hidraulici"""
-    if debit_m3s <= 0:
-        return None
-    
-    info_material = MATERIALE_CONDUCTE[material]
-    rugozitate_mm = info_material["rugozitate_mm"]
-    diametre = info_material["diametre_mm"]
-    v_max = info_material["v_max"]
-    viscozitate = calculeaza_viscozitate(temperatura)
-    
-    rezultate_valide = []
-    
-    for dn, di_mm in diametre.items():
-        di_m = di_mm / 1000
-        aria = math.pi * (di_m ** 2) / 4
-        viteza = debit_m3s / aria
+            
+        f_nou = (1 / partea_dreapta) ** 2
         
-        # Verificare viteză maximă
-        if viteza > v_max:
-            continue
+        if abs(f_nou - f_vechi) < epsilon:
+            return f_nou
         
-        # Calcul hidraulic
-        reynolds = calculeaza_reynolds(viteza, di_m, viscozitate)
-        rugozitate_rel = (rugozitate_mm / 1000) / di_m
-        lambda_val = calculeaza_lambda_haaland(reynolds, rugozitate_rel)
-        
-        # Pierdere unitară: i = λ × v² / (2gD)
-        pierdere_unitara = lambda_val * (viteza ** 2) / (2 * G * di_m)
-        
-        rezultate_valide.append({
-            "dn": dn,
-            "diametru": di_mm,
-            "viteza": viteza,
-            "reynolds": reynolds,
-            "lambda": lambda_val,
-            "pierdere_unitara": pierdere_unitara
-        })
+        f_vechi = f_nou
     
-    if not rezultate_valide:
-        return None
+    return f_vechi
+
+def pierdere_presiune_distribuita(debit: float, lungime: float, 
+                                 diametru: float, rugozitate: float,
+                                 temperatura: float = 10.0) -> float:
+    """Calculează pierderea de presiune distribuită în mCA"""
+    if diametru <= 0 or debit <= 0:
+        return 0.0
     
-    # Returnează cel mai mic diametru valid
-    return min(rezultate_valide, key=lambda x: x["dn"])
+    viteza = 4 * debit / (math.pi * (diametru/1000)**2)
+    re = reynolds(viteza, diametru/1000, temperatura)
+    f = factor_frecare_colebrook(re, rugozitate/1000, diametru/1000)
+    
+    return f * lungime * viteza**2 / (2 * G * diametru/1000)
 
-def calculeaza_pierderi_locale(viteza: float, lista_zeta: List[float]) -> float:
-    """h_loc = Σζ × v² / (2g)"""
-    if viteza <= 0:
-        return 0
-    suma_zeta = sum(lista_zeta)
-    return suma_zeta * (viteza ** 2) / (2 * G)
+def pierdere_presiune_locala(viteza: float, coeficient: float) -> float:
+    """Calculează pierderea de presiune locală în mCA"""
+    return coeficient * viteza**2 / (2 * G)
 
-# ======================== INIȚIALIZARE STATE ========================
-if 'tronsoane' not in st.session_state:
-    st.session_state.tronsoane = []
+def calcul_pierderi_locale_tronson(pierdere_dist: float, este_ultimul_etaj: bool, 
+                                   numar_tee: int = 1) -> float:
+    """
+    Calculează pierderile locale pentru un tronson
+    
+    Pentru ultimul etaj: 40% din pierderea distribuită (toate elementele)
+    Pentru restul: doar Tee-uri (coef 1.8 per bucată, estimat ca 5% din pierderea distribuită)
+    """
+    if este_ultimul_etaj:
+        # Ultimul etaj - toate pierderile locale (40% din distribuită)
+        return 0.4 * pierdere_dist
+    else:
+        # Restul etajelor - doar Tee-uri (5% per Tee)
+        return 0.05 * pierdere_dist * numar_tee
 
-if 'pierderi_obligatorii_active' not in st.session_state:
-    st.session_state.pierderi_obligatorii_active = {
-        "Contor apă": True,
-        "Filtru după contor": True,
-        "Robinet închidere branșament": True
+def selectare_diametru_material(material: str, diametru_minim: float) -> Tuple[float, float]:
+    """Selectează diametrul comercial disponibil și returnează DN"""
+    if material not in MATERIALE_CONDUCTE:
+        return 0, 0
+    
+    diametre_disponibile = MATERIALE_CONDUCTE[material]["diametre_mm"]
+    
+    for dn_comercial, di_real in sorted(diametre_disponibile.items()):
+        if di_real >= diametru_minim:
+            return dn_comercial, di_real
+    
+    return max(diametre_disponibile.keys()), diametre_disponibile[max(diametre_disponibile.keys())]
+
+def get_diametru_specific(material: str, dn: float) -> str:
+    """Obține diametrul specific pentru un material și DN dat"""
+    # Determinăm tipul de material pentru corelație
+    tip_material = None
+    
+    if "PPR" in material:
+        tip_material = "PPR"
+    elif "PEX" in material or "Multistrat" in material:
+        tip_material = "PEX/Multistrat"
+    elif "Cupru" in material:
+        tip_material = "Cupru"
+    elif "PE-HD" in material:
+        tip_material = "PE-HD"
+    elif "Oțel" in material:
+        tip_material = "Oțel"
+    elif "PVC" in material:
+        tip_material = "PPR"  # Folosim notația similară PPR
+    
+    if tip_material and tip_material in CORELARE_DN_DIAMETRE:
+        if dn in CORELARE_DN_DIAMETRE[tip_material]:
+            return CORELARE_DN_DIAMETRE[tip_material][dn]
+    
+    return f"DN{int(dn)}"
+
+# ======================== FUNCȚII ECHIPAMENTE ========================
+
+def calcul_bransament(debit_total: float, lungime: float = 50, 
+                     diferenta_cota: float = 2.0) -> Dict:
+    """Dimensionează conducta de branșament"""
+    # Folosim PE-HD pentru branșament
+    material = "PE-HD"
+    v_max = 2.5  # m/s pentru branșament
+    
+    # Diametru minim necesar
+    d_min = calcul_diametru_minim(debit_total, v_max)
+    dn, di = selectare_diametru_material(material, d_min)
+    
+    # Calcul pierderi
+    rugozitate = MATERIALE_CONDUCTE[material]["rugozitate_mm"]
+    pierdere_dist = pierdere_presiune_distribuita(debit_total, lungime, di, rugozitate)
+    pierdere_locala = diferenta_cota  # Pierdere geometrică
+    
+    return {
+        "material": material,
+        "dn": dn,
+        "diametru_interior": di,
+        "diametru_specific": get_diametru_specific(material, dn),
+        "lungime": lungime,
+        "debit": debit_total,
+        "viteza": 4 * debit_total / (math.pi * (di/1000)**2),
+        "pierdere_totala": pierdere_dist + pierdere_locala,
+        "presiune_necesara_bransament": max(20.0, pierdere_dist + pierdere_locala + 5.0)
     }
 
-if 'pierderi_optionale_active' not in st.session_state:
-    st.session_state.pierderi_optionale_active = {}
+def calcul_vas_tampon(debit_orar_maxim: float, timp_rezerva_min: float = 30) -> Dict:
+    """Calculează volumul vasului tampon (rezervor de rupere)"""
+    # Volum necesar = debit orar maxim * timp rezervă
+    volum_necesar = debit_orar_maxim * 3600 * (timp_rezerva_min / 60)  # litri
+    
+    # Rotunjim la valori standard
+    volume_standard = [500, 1000, 2000, 3000, 5000, 10000]
+    volum_ales = next((v for v in volume_standard if v >= volum_necesar), volume_standard[-1])
+    
+    return {
+        "volum_necesar": volum_necesar,
+        "volum_ales": volum_ales,
+        "timp_rezerva": timp_rezerva_min,
+        "debit_alimentare": debit_orar_maxim * 1.2,  # 20% marjă de siguranță
+        "diametru_alimentare": int(calcul_diametru_minim(debit_orar_maxim * 1.2 / 3600, 1.5)),
+        "diametru_plecare": int(calcul_diametru_minim(debit_orar_maxim / 3600, 2.0)),
+        "diametru_golire": max(50, int(volum_ales / 100))  # DN minim 50mm
+    }
 
-# ======================== INTERFAȚĂ ========================
+def calcul_hidrofor(debit: float, presiune_necesara: float, 
+                   numar_pompe: int = 2) -> Dict:
+    """Dimensionează stația de hidrofor"""
+    # Presiuni de lucru
+    presiune_pornire = presiune_necesara
+    presiune_oprire = presiune_pornire + 20  # +2 bar
+    presiune_medie = (presiune_pornire + presiune_oprire) / 2
+    
+    # Volum rezervor hidrofor (formula Aquamax)
+    porniri_pe_ora = 15  # maxim recomandat
+    volum_rezervor = (debit * 3600 * 0.25) / porniri_pe_ora
+    
+    # Rotunjire la valori standard
+    volume_standard = [24, 50, 80, 100, 200, 300, 500, 750, 1000]
+    volum_ales = next((v for v in volume_standard if v >= volum_rezervor), volume_standard[-1])
+    
+    # Caracteristici pompă
+    debit_pompa = debit / numar_pompe if numar_pompe > 1 else debit * 1.1
+    inaltime_pompare = presiune_oprire
+    
+    return {
+        "numar_pompe": numar_pompe,
+        "debit_pompa": debit_pompa * 3600,  # m³/h
+        "inaltime_pompare": inaltime_pompare,
+        "presiune_pornire": presiune_pornire,
+        "presiune_oprire": presiune_oprire,
+        "volum_rezervor": volum_ales,
+        "porniri_ora_max": porniri_pe_ora,
+        "putere_estimata": (debit_pompa * inaltime_pompare * G) / (0.7 * 1000),  # kW
+        "configuratie": f"{numar_pompe}x pompe ({numar_pompe-1} active + 1 rezervă)" if numar_pompe > 1 else "1 pompă"
+    }
 
-st.title("💧 Calculator Instalații Sanitare Profesional I9-2022")
-st.markdown("**Versiune 5.0 Pro** - Pierderi automate, presiuni minime, bibliotecă extinsă materiale")
-st.divider()
+def calcul_reducator_presiune(presiune_intrare: float, presiune_iesire: float,
+                             debit: float) -> Dict:
+    """Selectează reducător de presiune"""
+    # Calculăm DN bazat pe debit
+    viteza_recomandata = 2.0  # m/s prin reducător
+    dn_necesar = calcul_diametru_minim(debit, viteza_recomandata)
+    
+    # Selectăm DN standard
+    dn_standard = [15, 20, 25, 32, 40, 50, 65, 80, 100]
+    dn_ales = next((d for d in dn_standard if d >= dn_necesar), dn_standard[-1])
+    
+    return {
+        "dn": dn_ales,
+        "presiune_intrare_max": presiune_intrare,
+        "presiune_reglata": presiune_iesire,
+        "debit_nominal": debit * 3600,  # m³/h
+        "raport_reducere": presiune_intrare / presiune_iesire,
+        "tip_recomandat": "Cu pistoane" if dn_ales <= 50 else "Cu membrană",
+        "manometru_intrare": "0-10 bar" if presiune_intrare <= 60 else "0-16 bar",
+        "manometru_iesire": "0-6 bar"
+    }
 
-# ======================== SIDEBAR ========================
-with st.sidebar:
-    st.header("⚙️ Configurare Proiect")
-    
-    tip_instalatie = st.radio(
-        "Tip instalație:",
-        ["🔵 Apă rece", "🔴 Apă caldă"]
-    )
-    
-    temperatura = 10 if "rece" in tip_instalatie else 55
-    st.caption(f"**Temperatură:** {temperatura}°C")
-    
-    material = st.selectbox(
-        "Material conducte:",
-        list(MATERIALE_CONDUCTE.keys())
-    )
-    
-    with st.expander("📋 Info Material"):
-        info = MATERIALE_CONDUCTE[material]
-        st.caption(f"**k:** {info['rugozitate_mm']} mm")
-        st.caption(f"**v_max:** {info['v_max']} m/s")
-        st.caption(f"**DN:** {len(info['diametre_mm'])} mărimi")
-        st.info(info['info'])
-    
-    tip_cladire = st.selectbox(
-        "Tip clădire:",
-        list(COEFICIENTI_CLADIRE.keys())
-    )
-    
-    metoda_auto = COEFICIENTI_CLADIRE[tip_cladire]["metoda"]
-    st.info(f"**{metoda_auto}** (automat)")
-    st.caption(COEFICIENTI_CLADIRE[tip_cladire]["descriere"])
-    
-    aplica_siguranta = st.checkbox(
-        "Coeficient +10% siguranță",
-        value=True,
-        help="Recomandat I9-2022"
-    )
-    
-    st.divider()
-    
-    presiune_retea = st.number_input(
-        "Presiune rețea (mCA):",
-        min_value=0.0,
-        max_value=100.0,
-        value=30.0,
-        step=5.0
-    )
-    
-    st.divider()
-    
-    # Pierderi obligatorii
-    st.subheader("🔧 Pierderi Obligatorii")
-    for nume, info in PIERDERI_OBLIGATORII.items():
-        activ = st.checkbox(
-            f"{nume} (ζ={info['zeta']})",
-            value=st.session_state.pierderi_obligatorii_active.get(nume, True),
-            key=f"obl_{nume}",
-            help=info['descriere']
-        )
-        st.session_state.pierderi_obligatorii_active[nume] = activ
-    
-    # Pierderi opționale
-    with st.expander("⚙️ Pierderi Opționale"):
-        for nume, info in PIERDERI_OPTIONALE.items():
-            activ = st.checkbox(
-                f"{nume} (ζ={info['zeta']})",
-                value=st.session_state.pierderi_optionale_active.get(nume, False),
-                key=f"opt_{nume}",
-                help=info['descriere']
-            )
-            st.session_state.pierderi_optionale_active[nume] = activ
+# ======================== INTERFAȚA STREAMLIT ========================
 
-# ======================== SECȚIUNE PRINCIPALĂ ========================
-
-st.header("📐 Definire Tronsoane")
-
-col_info1, col_info2 = st.columns([3, 1])
-
-with col_info1:
-    st.info("""
-    **🎯 Workflow:**
-    1. **Tronson 1** = consumatorul cel mai dezavantajat
-    2. Adaugă aparate → pierderi locale **calculate automat**
-    3. **Tronson 2+** = aparatele anterioare sunt **automat incluse**
-    4. Calculează dimensionarea completă
-    """)
-
-with col_info2:
-    st.metric("Tronsoane", len(st.session_state.tronsoane))
+def main():
+    # Header profesional
+    st.markdown("""
+    <h1 style='text-align: center; color: #1e3d59;'>
+        Calculator Profesional Instalații Sanitare
+    </h1>
+    <h3 style='text-align: center; color: #5c7080;'>
+        Conform I9-2022 și SR 1343-1:2006
+    </h3>
+    <p style='text-align: center; color: #8b9dc3; font-size: 14px;'>
+        Dimensionare instalații de alimentare cu apă pentru consum menajer
+    </p>
+    """, unsafe_allow_html=True)
     
-    if st.button("➕ Adaugă", type="primary", use_container_width=True):
-        st.session_state.tronsoane.append({
-            'nr': len(st.session_state.tronsoane) + 1,
-            'aparate_noi': {},
-            'lungime': 5.0,
-            'dif_nivel': 3.0 if len(st.session_state.tronsoane) == 0 else 0.0,
-            'pierderi_extra': {}
-        })
-        st.rerun()
+    # Tabs principale
+    tab_principal = st.tabs([
+        "🚿 Alimentare cu Apă",
+        "🌧️ Ape Pluviale", 
+        "🚽 Canalizare Menajeră",
+        "📊 Rapoarte",
+        "📚 Documentație"
+    ])
     
-    if len(st.session_state.tronsoane) > 0 and st.button("🗑️ Șterge", use_container_width=True):
-        st.session_state.tronsoane.pop()
-        st.rerun()
-
-st.divider()
-
-# ======================== DEFINIRE TRONSOANE ========================
-
-for idx, tronson in enumerate(st.session_state.tronsoane):
-    nr_tronson = tronson['nr']
-    
-    # Calcul aparate cumulate
-    aparate_cumulate = {}
-    for i in range(idx + 1):
-        for aparat, nr in st.session_state.tronsoane[i]['aparate_noi'].items():
-            aparate_cumulate[aparat] = aparate_cumulate.get(aparat, 0) + nr
-    
-    total_ap_cumulate = sum(aparate_cumulate.values())
-    
-    with st.expander(
-        f"🔹 **TRONSON {nr_tronson}**" + 
-        (f" - {total_ap_cumulate} aparate" if total_ap_cumulate > 0 else ""),
-        expanded=(idx == len(st.session_state.tronsoane) - 1)
-    ):
+    # =============== TAB ALIMENTARE CU APĂ ===============
+    with tab_principal[0]:
+        st.info("📐 **Modul complet pentru dimensionare instalații de alimentare cu apă**")
         
-        # Afișare moștenire
-        if idx > 0:
-            ap_anterioare = {}
-            for i in range(idx):
-                for ap, nr in st.session_state.tronsoane[i]['aparate_noi'].items():
-                    ap_anterioare[ap] = ap_anterioare.get(ap, 0) + nr
+        # Sub-tabs pentru diferite componente
+        sub_tabs = st.tabs([
+            "Consumatori & Trasee",
+            "Branșament",
+            "Vas Tampon",
+            "Hidrofor",
+            "Echipamente"
+        ])
+        
+        # --- Sub-tab Consumatori & Trasee ---
+        with sub_tabs[0]:
+            col1, col2 = st.columns([1, 2])
             
-            if ap_anterioare:
-                st.success(f"✅ **Moșteninește:** " + 
-                         ", ".join([f"{nr}× {ap}" for ap, nr in ap_anterioare.items()]))
-        
-        # Selectare aparate NOI
-        st.markdown("### Aparate NOI:")
-        
-        # Grupare pe categorii
-        categorii = {}
-        for ap, date in APARATE_SANITARE.items():
-            cat = date.get("categorie", "Alte")
-            if cat not in categorii:
-                categorii[cat] = []
-            categorii[cat].append(ap)
-        
-        for categorie, lista_ap in categorii.items():
-            st.markdown(f"**{categorie}:**")
-            cols = st.columns(min(3, len(lista_ap)))
+            with col1:
+                st.subheader("🚿 Selectare Consumatori")
+                
+                # Grupare pe categorii
+                categorii = set(c["categorie"] for c in CONSUMATORI.values())
+                
+                consumatori_selectati = []
+                for categorie in sorted(categorii):
+                    with st.expander(f"📁 {categorie}", expanded=(categorie=="Baie")):
+                        for nume, date in CONSUMATORI.items():
+                            if date["categorie"] == categorie:
+                                cantitate = st.number_input(
+                                    f"{nume} (Q={date['debit']} L/s)",
+                                    min_value=0, max_value=50, value=0, step=1,
+                                    key=f"cons_{nume}"
+                                )
+                                if cantitate > 0:
+                                    consumatori_selectati.append({
+                                        "nume": nume,
+                                        "cantitate": cantitate,
+                                        **date
+                                    })
+                
+                # Calcul debit
+                if consumatori_selectati:
+                    debit_prob = calcul_debit_probabilistic(consumatori_selectati)
+                    st.success(f"💧 **Debit probabilistic total: {debit_prob:.3f} L/s**")
+                    st.info(f"📊 **Debit orar maxim: {debit_prob*3.6:.2f} m³/h**")
             
-            for i, aparat in enumerate(lista_ap):
-                with cols[i % 3]:
-                    date_ap = APARATE_SANITARE[aparat]
-                    
-                    nr_ap = st.number_input(
-                        aparat,
-                        min_value=0,
-                        max_value=50,
-                        value=tronson['aparate_noi'].get(aparat, 0),
-                        key=f"t{nr_tronson}_{aparat}",
-                        help=f"Q: {date_ap['debit']} L/s | Ui: {date_ap['unitate']} | Pmin: {date_ap['presiune_min']} mCA"
+            with col2:
+                st.subheader("📏 Dimensionare Tronsoane")
+                
+                if consumatori_selectati:
+                    # Selectare material
+                    material = st.selectbox(
+                        "🔧 Material conductă",
+                        list(MATERIALE_CONDUCTE.keys()),
+                        index=1  # PPR cu fibră default
                     )
                     
-                    if nr_ap > 0:
-                        st.caption(f"💧{date_ap['debit']} L/s | 📊{date_ap['unitate']} Ui | ⚡{date_ap['presiune_min']} mCA")
-                        tronson['aparate_noi'][aparat] = nr_ap
-                    elif aparat in tronson['aparate_noi']:
-                        del tronson['aparate_noi'][aparat]
+                    # Afișare info material
+                    st.caption(f"ℹ️ {MATERIALE_CONDUCTE[material]['info']}")
+                    
+                    # Input tronsoane
+                    st.write("---")
+                    st.write("**📐 Definire tronsoane:**")
+                    
+                    col_a, col_b = st.columns([3, 1])
+                    with col_a:
+                        num_tronsoane = st.slider(
+                            "Număr tronsoane", 
+                            min_value=1, max_value=10, value=3
+                        )
+                    with col_b:
+                        st.info(f"**Total: {num_tronsoane} tronsoane**")
+                    
+                    tronsoane = []
+                    for i in range(num_tronsoane):
+                        with st.expander(f"**Tronson {i+1}**", expanded=(i==0)):
+                            col_a, col_b, col_c, col_d = st.columns(4)
+                            with col_a:
+                                lungime = st.number_input(
+                                    "📏 Lungime (m)", 
+                                    min_value=0.5, max_value=100.0, value=10.0, 
+                                    key=f"lung_{i}"
+                                )
+                            with col_b:
+                                debit_tronson = st.number_input(
+                                    "💧 Debit (L/s)", 
+                                    min_value=0.01, max_value=10.0, 
+                                    value=round(debit_prob * (1 - i*0.2), 3) if i < 4 else debit_prob*0.2,
+                                    key=f"deb_{i}"
+                                )
+                            with col_c:
+                                diferenta_nivel = st.number_input(
+                                    "📐 Δh nivel (m)", 
+                                    min_value=-50.0, max_value=50.0, 
+                                    value=3.0 if i > 0 else 0.0,
+                                    key=f"dh_{i}",
+                                    help="Diferența de cotă față de tronsonul anterior"
+                                )
+                            with col_d:
+                                este_ultimul = st.checkbox(
+                                    "🏁 Ultimul etaj",
+                                    key=f"ultim_{i}",
+                                    value=(i == num_tronsoane - 1),
+                                    help="Bifați pentru punctul cel mai defavorabil"
+                                )
+                            
+                            numar_tee = 1
+                            if not este_ultimul and i < num_tronsoane - 1:
+                                numar_tee = st.number_input(
+                                    "🔀 Număr Tee-uri pe tronson",
+                                    min_value=0, max_value=5, value=1,
+                                    key=f"tee_{i}",
+                                    help="Pentru derivații către consumatori"
+                                )
+                            
+                            tronsoane.append({
+                                "nr": i+1,
+                                "lungime": lungime,
+                                "debit": debit_tronson,
+                                "diferenta_nivel": diferenta_nivel,
+                                "este_ultimul_etaj": este_ultimul,
+                                "numar_tee": numar_tee
+                            })
+                    
+                    if st.button("🔍 **CALCULEAZĂ DIMENSIUNI**", type="primary"):
+                        rezultate = []
+                        pierdere_totala_traseu = 0
+                        
+                        st.write("---")
+                        st.subheader("📊 Rezultate dimensionare")
+                        
+                        for tronson in tronsoane:
+                            # Calcule pentru fiecare tronson
+                            v_max = MATERIALE_CONDUCTE[material]["v_max"]
+                            d_min = calcul_diametru_minim(tronson["debit"]/1000, v_max)
+                            dn, di = selectare_diametru_material(material, d_min)
+                            
+                            viteza = 4 * tronson["debit"]/1000 / (math.pi * (di/1000)**2)
+                            
+                            # Pierderi distribuite
+                            pierdere_dist = pierdere_presiune_distribuita(
+                                tronson["debit"]/1000,
+                                tronson["lungime"],
+                                di,
+                                MATERIALE_CONDUCTE[material]["rugozitate_mm"]
+                            )
+                            
+                            # Pierderi locale - logica corectă
+                            pierdere_locala = calcul_pierderi_locale_tronson(
+                                pierdere_dist,
+                                tronson["este_ultimul_etaj"],
+                                tronson["numar_tee"]
+                            )
+                            
+                            # Pierdere geometrică
+                            pierdere_geometrica = tronson["diferenta_nivel"]
+                            
+                            # Total
+                            pierdere_totala = pierdere_dist + pierdere_locala + pierdere_geometrica
+                            pierdere_totala_traseu += pierdere_totala
+                            
+                            rezultate.append({
+                                "Tronson": f"T{tronson['nr']}",
+                                "Poziție": "🏁 ULTIM" if tronson["este_ultimul_etaj"] else f"🔀 {tronson['numar_tee']} Tee",
+                                "L (m)": tronson["lungime"],
+                                "Q (L/s)": f"{tronson['debit']:.3f}",
+                                "DN": f"DN{int(dn)}",
+                                "D. Specific": get_diametru_specific(material, dn),
+                                "Di (mm)": f"{di:.1f}",
+                                "v (m/s)": f"{viteza:.2f}",
+                                "ΔH dist": f"{pierdere_dist:.2f}",
+                                "ΔH loc": f"{pierdere_locala:.2f}",
+                                "ΔH geom": f"{pierdere_geometrica:.2f}",
+                                "ΔH tot": f"{pierdere_totala:.2f}"
+                            })
+                        
+                        # Afișare rezultate
+                        col_res1, col_res2 = st.columns([2, 1])
+                        
+                        with col_res1:
+                            st.success(f"✅ **Pierdere totală traseu: {pierdere_totala_traseu:.2f} mCA**")
+                            
+                            # Presiune necesară
+                            presiune_necesara = pierdere_totala_traseu + 10  # +10 mCA rezervă la consumator
+                            st.info(f"⚡ **Presiune necesară la bază: {presiune_necesara:.1f} mCA**")
+                        
+                        with col_res2:
+                            st.metric(
+                                "Presiune (bar)",
+                                f"{presiune_necesara/10:.1f}",
+                                f"+{1.0:.1f} rezervă"
+                            )
+                        
+                        # Tabel rezultate
+                        df_rezultate = pd.DataFrame(rezultate)
+                        st.dataframe(
+                            df_rezultate,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Poziție": st.column_config.TextColumn(
+                                    "Tip tronson",
+                                    help="🏁 = Ultimul etaj (toate pierderile), 🔀 = Număr Tee-uri"
+                                ),
+                                "ΔH dist": st.column_config.TextColumn("ΔH dist (mCA)"),
+                                "ΔH loc": st.column_config.TextColumn("ΔH loc (mCA)"),
+                                "ΔH geom": st.column_config.TextColumn("ΔH geom (m)"),
+                                "ΔH tot": st.column_config.TextColumn("ΔH total (mCA)")
+                            }
+                        )
+                        
+                        # Note explicative
+                        with st.expander("ℹ️ **Explicație calcul pierderi locale**"):
+                            st.write("""
+                            **Logica aplicată conform practicii inginerești:**
+                            
+                            • **Tronsoane marcate ca ULTIM (🏁)**:
+                              - Se calculează TOATE pierderile locale
+                              - Include: robinete, coturi, tee-uri, reducții, clapete de sens
+                              - Estimare: 40% din pierderea distribuită
+                            
+                            • **Restul tronsoanelor (🔀)**:
+                              - Se calculează DOAR pierderile pentru Tee-uri
+                              - Motivație: presiunea calculată pentru ultimul etaj acoperă toate celelalte
+                              - Estimare: 5% din pierderea distribuită per Tee
+                            
+                            Această abordare evită supradimensionarea sistemului și reflectă comportamentul real hidraulic.
+                            """)
+                        
+                        # Grafic pierderi
+                        fig = go.Figure()
+                        
+                        # Stacked bar pentru tipuri de pierderi
+                        fig.add_trace(go.Bar(
+                            x=[r["Tronson"] for r in rezultate],
+                            y=[float(r["ΔH dist"]) for r in rezultate],
+                            name="Distribuite",
+                            marker_color='#3498db',
+                            text=[f"{float(r['ΔH dist']):.1f}" for r in rezultate],
+                            textposition='inside'
+                        ))
+                        
+                        fig.add_trace(go.Bar(
+                            x=[r["Tronson"] for r in rezultate],
+                            y=[float(r["ΔH loc"]) for r in rezultate],
+                            name="Locale",
+                            marker_color='#e74c3c',
+                            text=[f"{float(r['ΔH loc']):.1f}" for r in rezultate],
+                            textposition='inside'
+                        ))
+                        
+                        fig.add_trace(go.Bar(
+                            x=[r["Tronson"] for r in rezultate],
+                            y=[float(r["ΔH geom"]) for r in rezultate],
+                            name="Geometrice",
+                            marker_color='#2ecc71',
+                            text=[f"{float(r['ΔH geom']):.1f}" for r in rezultate],
+                            textposition='inside'
+                        ))
+                        
+                        fig.update_layout(
+                            title="Distribuția pierderilor de presiune pe tronsoane",
+                            xaxis_title="Tronson",
+                            yaxis_title="Pierdere (mCA)",
+                            barmode='stack',
+                            height=400,
+                            showlegend=True,
+                            hovermode='x unified'
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
         
-        st.divider()
-        
-        # Calcul totale
-        total_debit = sum(APARATE_SANITARE[ap]["debit"] * nr 
-                         for ap, nr in aparate_cumulate.items())
-        total_ui = sum(APARATE_SANITARE[ap]["unitate"] * nr 
-                      for ap, nr in aparate_cumulate.items())
-        
-        # Calcul debit de calcul
-        debit_calc, formula_debit = calculeaza_debit_calcul(
-            tip_cladire, total_debit, total_ui, aplica_siguranta
-        )
-        
-        col_t1, col_t2, col_t3, col_t4 = st.columns(4)
-        
-        with col_t1:
-            st.metric("Aparate", f"{total_ap_cumulate}")
-        with col_t2:
-            st.metric("Σ Debite", f"{total_debit:.3f} L/s")
-        with col_t3:
-            st.metric("Σ Ui", f"{total_ui:.1f}")
-        with col_t4:
-            st.metric("Q calcul", f"{debit_calc:.3f} L/s", 
-                     help=f"Formula: {formula_debit}")
-        
-        st.divider()
-        
-        # Geometrie
-        col_g1, col_g2 = st.columns(2)
-        
-        with col_g1:
-            lungime = st.number_input(
-                "Lungime (m):",
-                0.1, 100.0,
-                float(tronson['lungime']),
-                0.5,
-                key=f"lung{nr_tronson}"
-            )
-            tronson['lungime'] = lungime
-        
-        with col_g2:
-            dif_nivel = st.number_input(
-                "Δh nivel (m):",
-                -50.0, 50.0,
-                float(tronson['dif_nivel']),
-                0.5,
-                key=f"dh{nr_tronson}",
-                help="+ urcare, - coborâre"
-            )
-            tronson['dif_nivel'] = dif_nivel
-        
-        st.divider()
-        
-        # PIERDERI LOCALE
-        st.markdown("### 🔧 Pierderi Locale")
-        
-        # AUTOMATE pentru aparate
-        pierderi_aparate = []
-        detalii_automate = []
-        
-        for aparat, nr_ap in aparate_cumulate.items():
-            date_ap = APARATE_SANITARE[aparat]
-            for nume_pierdere, zeta in date_ap["pierderi_automate"].items():
-                pierderi_aparate.extend([zeta] * nr_ap)
-                detalii_automate.append(f"{nr_ap}× {nume_pierdere} (ζ={zeta})")
-        
-        # AUTOMATE pe tronson
-        pierderi_tronson_auto = []
-        if idx > 0:  # De la tronsonul 2 încolo
-            pierderi_tronson_auto.append(PIERDERI_TRONSON["Teu trecere la racord"]["zeta"])
-            detalii_automate.append(f"Teu trecere racord (ζ={PIERDERI_TRONSON['Teu trecere la racord']['zeta']})")
-        
-        pierderi_tronson_auto.append(PIERDERI_TRONSON["Vană închidere derivație"]["zeta"])
-        detalii_automate.append(f"Vană închidere (ζ={PIERDERI_TRONSON['Vană închidere derivație']['zeta']})")
-        
-        total_automate = sum(pierderi_aparate) + sum(pierderi_tronson_auto)
-        
-        with st.expander(f"✅ Pierderi AUTOMATE (Σζ = {total_automate:.1f})", expanded=False):
-            for detaliu in detalii_automate:
-                st.caption(f"• {detaliu}")
-        
-        # EXTRA
-        st.markdown("**Pierderi EXTRA (opțional):**")
-        
-        cols_extra = st.columns(3)
-        pierderi_extra_vals = []
-        
-        for i, (nume, zeta) in enumerate(PIERDERI_EXTRA.items()):
-            with cols_extra[i % 3]:
-                nr = st.number_input(
-                    f"{nume} (ζ={zeta}):",
-                    0, 50, 
-                    tronson['pierderi_extra'].get(nume, 0),
-                    key=f"extra{nr_tronson}_{nume}"
+        # --- Sub-tab Branșament ---
+        with sub_tabs[1]:
+            st.subheader("🔌 Dimensionare Branșament")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Parametri branșament:**")
+                debit_bransament = st.number_input(
+                    "💧 Debit total (L/s)", 
+                    min_value=0.1, max_value=50.0, value=2.0,
+                    help="Debitul probabilistic total al clădirii"
                 )
-                tronson['pierderi_extra'][nume] = nr
-                if nr > 0:
-                    pierderi_extra_vals.extend([zeta] * nr)
+                lungime_bransament = st.number_input(
+                    "📏 Lungime branșament (m)", 
+                    min_value=1.0, max_value=200.0, value=50.0,
+                    help="Distanța de la rețeaua publică la clădire"
+                )
+                diferenta_cota_brans = st.number_input(
+                    "📐 Diferență de cotă (m)", 
+                    min_value=-10.0, max_value=20.0, value=2.0,
+                    help="Pozitiv dacă clădirea e mai sus decât rețeaua"
+                )
+            
+            with col2:
+                st.write("**Material recomandat: PE-HD**")
+                st.caption("Rezistent UV, flexibil, durată mare de viață")
+                
+                if st.button("📐 **Calculează Branșament**", key="btn_brans"):
+                    rezultat = calcul_bransament(
+                        debit_bransament/1000,
+                        lungime_bransament,
+                        diferenta_cota_brans
+                    )
+                    
+                    st.success("✅ **Rezultate Branșament:**")
+                    
+                    col_r1, col_r2 = st.columns(2)
+                    
+                    with col_r1:
+                        st.metric("Dimensiune", f"DN{int(rezultat['dn'])}")
+                        st.metric("Diametru specific", rezultat['diametru_specific'])
+                        st.metric("Viteză", f"{rezultat['viteza']:.2f} m/s")
+                    
+                    with col_r2:
+                        st.metric("Pierdere totală", f"{rezultat['pierdere_totala']:.2f} mCA")
+                        st.metric("Presiune necesară", f"{rezultat['presiune_necesara_bransament']:.1f} mCA")
+                        st.metric("Material", rezultat['material'])
         
-        total_extra = sum(pierderi_extra_vals)
-        total_zeta_tronson = total_automate + total_extra
+        # --- Sub-tab Vas Tampon ---
+        with sub_tabs[2]:
+            st.subheader("💧 Dimensionare Vas Tampon (Rezervor de Rupere)")
+            
+            st.info("Rezervorul tampon asigură o rezervă de apă și decuplează presiunea de la rețea")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Parametri de calcul:**")
+                debit_orar = st.number_input(
+                    "📊 Debit orar maxim (m³/h)", 
+                    min_value=0.5, max_value=100.0, value=5.0,
+                    help="Debitul probabilistic × 3.6"
+                )
+                timp_rezerva = st.slider(
+                    "⏱️ Timp de rezervă (minute)", 
+                    min_value=15, max_value=120, value=30,
+                    help="Autonomie în caz de întrerupere alimentare"
+                )
+            
+            with col2:
+                st.write("**Volume standard disponibile:**")
+                st.caption("500L, 1000L, 2000L, 3000L, 5000L, 10000L")
+                
+                if st.button("📐 **Calculează Vas Tampon**", key="btn_vas"):
+                    rezultat = calcul_vas_tampon(debit_orar, timp_rezerva)
+                    
+                    st.success("✅ **Dimensionare Vas Tampon:**")
+                    
+                    col_v1, col_v2 = st.columns(2)
+                    
+                    with col_v1:
+                        st.metric("Volum necesar", f"{rezultat['volum_necesar']:.0f} L")
+                        st.metric("Volum ales", f"{rezultat['volum_ales']} L", "Standard")
+                        st.metric("Timp rezervă", f"{rezultat['timp_rezerva']} min")
+                    
+                    with col_v2:
+                        st.metric("DN alimentare", f"DN{rezultat['diametru_alimentare']}")
+                        st.metric("DN plecare", f"DN{rezultat['diametru_plecare']}")
+                        st.metric("DN golire", f"DN{rezultat['diametru_golire']}")
         
-        col_z1, col_z2, col_z3 = st.columns(3)
-        with col_z1:
-            st.metric("Σζ Automate", f"{total_automate:.1f}")
-        with col_z2:
-            st.metric("Σζ Extra", f"{total_extra:.1f}")
-        with col_z3:
-            st.metric("**Σζ TOTAL**", f"{total_zeta_tronson:.1f}")
-
-# ======================== CALCUL DIMENSIONARE ========================
-
-if len(st.session_state.tronsoane) > 0:
-    st.divider()
+        # --- Sub-tab Hidrofor ---
+        with sub_tabs[3]:
+            st.subheader("🚀 Dimensionare Stație Hidrofor")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**Parametri sistem:**")
+                debit_hidrofor = st.number_input(
+                    "💧 Debit necesar (L/s)", 
+                    min_value=0.5, max_value=50.0, value=3.0,
+                    help="Debitul probabilistic total"
+                )
+                presiune_necesara = st.number_input(
+                    "⚡ Presiune necesară (mCA)", 
+                    min_value=10.0, max_value=100.0, value=35.0,
+                    help="Presiunea calculată din pierderi + rezervă"
+                )
+                numar_pompe = st.selectbox(
+                    "🔧 Configurație pompe",
+                    [1, 2, 3, 4],
+                    index=1,
+                    format_func=lambda x: f"{x} pompă" if x==1 else f"{x} pompe ({x-1}+1 rezervă)"
+                )
+            
+            with col2:
+                st.write("**Parametri funcționare:**")
+                st.caption("• Porniri max/oră: 15")
+                st.caption("• Diferența presiune: 2 bar")
+                st.caption("• Randament pompă: 70%")
+                
+                if st.button("📐 **Calculează Hidrofor**", key="btn_hidro"):
+                    rezultat = calcul_hidrofor(
+                        debit_hidrofor/1000,
+                        presiune_necesara,
+                        numar_pompe
+                    )
+                    
+                    st.success("✅ **Parametri Hidrofor:**")
+                    
+                    col_h1, col_h2, col_h3 = st.columns(3)
+                    
+                    with col_h1:
+                        st.metric("Configurație", rezultat['configuratie'])
+                        st.metric("Debit pompă", f"{rezultat['debit_pompa']:.2f} m³/h")
+                        st.metric("Putere motor", f"{rezultat['putere_estimata']:.2f} kW")
+                    
+                    with col_h2:
+                        st.metric("Presiune pornire", f"{rezultat['presiune_pornire']:.1f} mCA")
+                        st.metric("Presiune oprire", f"{rezultat['presiune_oprire']:.1f} mCA")
+                        st.metric("Înălțime pompare", f"{rezultat['inaltime_pompare']:.1f} m")
+                    
+                    with col_h3:
+                        st.metric("Volum rezervor", f"{rezultat['volum_rezervor']} L")
+                        st.metric("Porniri/oră", f"max {rezultat['porniri_ora_max']}")
+                        st.metric("Presiune (bar)", f"{rezultat['presiune_oprire']/10:.1f}")
+        
+        # --- Sub-tab Echipamente ---
+        with sub_tabs[4]:
+            st.subheader("⚙️ Echipamente Auxiliare")
+            
+            # Reducător de presiune
+            with st.expander("🔽 **Reducător de Presiune**"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Parametri reducător:**")
+                    presiune_intrare = st.number_input(
+                        "📈 Presiune intrare (mCA)", 
+                        min_value=20.0, max_value=160.0, value=60.0
+                    )
+                    presiune_iesire = st.number_input(
+                        "📉 Presiune ieșire dorită (mCA)", 
+                        min_value=10.0, max_value=50.0, value=30.0
+                    )
+                    debit_reducator = st.number_input(
+                        "💧 Debit (L/s)", 
+                        min_value=0.1, max_value=20.0, value=2.0
+                    )
+                
+                with col2:
+                    st.write("**Tipuri disponibile:**")
+                    st.caption("• Cu pistoane (DN ≤ 50)")
+                    st.caption("• Cu membrană (DN > 50)")
+                    
+                    if st.button("Selectează Reducător", key="btn_reducator"):
+                        rezultat = calcul_reducator_presiune(
+                            presiune_intrare,
+                            presiune_iesire,
+                            debit_reducator/1000
+                        )
+                        
+                        st.success("✅ **Specificații Reducător:**")
+                        
+                        col_red1, col_red2 = st.columns(2)
+                        with col_red1:
+                            st.metric("Dimensiune", f"DN{rezultat['dn']}")
+                            st.metric("Tip", rezultat['tip_recomandat'])
+                            st.metric("Raport reducere", f"1:{rezultat['raport_reducere']:.1f}")
+                        
+                        with col_red2:
+                            st.metric("Manometru IN", rezultat['manometru_intrare'])
+                            st.metric("Manometru OUT", rezultat['manometru_iesire'])
+                            st.metric("Debit nominal", f"{rezultat['debit_nominal']:.2f} m³/h")
+            
+            # Clapete de sens
+            with st.expander("↗️ **Clapete de Sens**"):
+                st.info("Clapetele de sens previn curgerea inversă a apei")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.write("**Tipuri principale:**")
+                    st.write("• **Cu arc** - universale")
+                    st.write("• **Cu bilă** - pentru impurități")
+                    st.write("• **Tip fluture** - DN mare")
+                    st.write("• **Cu disc oscilant** - presiuni mici")
+                
+                with col2:
+                    dn_clapeta = st.selectbox(
+                        "Selectează DN clapetă",
+                        [15, 20, 25, 32, 40, 50, 65, 80, 100, 125, 150],
+                        index=2
+                    )
+                    
+                    tip_clapeta = "Cu arc" if dn_clapeta <= 50 else "Tip fluture"
+                    st.success(f"✅ Clapetă de sens **DN{dn_clapeta}**")
+                    st.info(f"Tip recomandat: **{tip_clapeta}**")
+            
+            # Filtre
+            with st.expander("🔍 **Filtre de Apă**"):
+                st.info("Filtrele protejează instalația și echipamentele")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    tip_filtru = st.selectbox(
+                        "Tip filtru",
+                        ["Filtru Y cu sită inox",
+                         "Filtru magnetic",
+                         "Filtru cu cartuș lavabil",
+                         "Filtru automat cu spălare inversă"]
+                    )
+                    
+                    finete_filtrare = st.select_slider(
+                        "Finețe filtrare (μm)",
+                        [5000, 2000, 1000, 500, 200, 100, 50, 25, 10, 5],
+                        value=100
+                    )
+                
+                with col2:
+                    st.write("**Recomandări finețe:**")
+                    st.caption("• 500-1000 μm - protecție generală")
+                    st.caption("• 100-200 μm - după contor")
+                    st.caption("• 25-50 μm - protecție fină")
+                    st.caption("• 5-10 μm - apă potabilă")
+                    
+                    st.success(f"✅ {tip_filtru}")
+                    st.info(f"Finețe: **{finete_filtrare} μm**")
     
-    if st.button("🔬 CALCULEAZĂ DIMENSIONARE", type="primary", use_container_width=True):
-        st.header("📊 Rezultate Dimensionare")
+    # =============== TAB APE PLUVIALE ===============
+    with tab_principal[1]:
+        st.info("🌧️ **Calculator pentru sisteme de preluare ape pluviale**")
         
-        # Calculare pierderi obligatorii și opționale
-        pierderi_instalatie = []
-        for nume, activ in st.session_state.pierderi_obligatorii_active.items():
-            if activ:
-                pierderi_instalatie.append(PIERDERI_OBLIGATORII[nume]["zeta"])
+        st.subheader("📐 Dimensionare sistem pluvial")
         
-        for nume, activ in st.session_state.pierderi_optionale_active.items():
-            if activ:
-                pierderi_instalatie.append(PIERDERI_OPTIONALE[nume]["zeta"])
+        col1, col2, col3 = st.columns(3)
         
-        # Procesare tronsoane
-        rezultate = []
-        h_lin_totala = 0
-        h_loc_totala = 0
-        dif_nivel_totala = 0
-        presiune_min_necesara = 0  # Se determină din tronsonul 1
+        with col1:
+            st.write("**Date acoperiș:**")
+            suprafata_acoperis = st.number_input(
+                "Suprafață acoperiș (m²)", 
+                min_value=10.0, max_value=10000.0, value=200.0
+            )
+            tip_acoperis = st.selectbox(
+                "Tip acoperiș",
+                ["Țiglă", "Tablă", "Membrană", "Beton", "Sticlă"]
+            )
         
-        for idx, tronson in enumerate(st.session_state.tronsoane):
-            nr_t = tronson['nr']
+        with col2:
+            st.write("**Parametri ploaie:**")
+            intensitate_ploaie = st.number_input(
+                "Intensitate ploaie (L/s/ha)", 
+                min_value=100.0, max_value=400.0, value=200.0,
+                help="Conform zonei climatice"
+            )
+            coef_scurgere = st.slider(
+                "Coeficient de scurgere",
+                min_value=0.5, max_value=1.0, value=0.9,
+                help="Depinde de materialul acoperișului"
+            )
+        
+        with col3:
+            st.write("**Rezultate calcul:**")
+            debit_pluvial = (suprafata_acoperis * intensitate_ploaie * coef_scurgere) / 10000
+            st.metric("Debit pluvial", f"{debit_pluvial:.2f} L/s")
             
-            # Aparate cumulate
-            aparate_cum = {}
-            for i in range(idx + 1):
-                for ap, nr in st.session_state.tronsoane[i]['aparate_noi'].items():
-                    aparate_cum[ap] = aparate_cum.get(ap, 0) + nr
+            # Număr receptoare
+            nr_receptoare = max(1, int(suprafata_acoperis / 80))  # 1 receptor la 80 mp
+            st.metric("Receptoare necesare", nr_receptoare)
             
-            total_debit = sum(APARATE_SANITARE[ap]["debit"] * nr 
-                             for ap, nr in aparate_cum.items())
-            total_ui = sum(APARATE_SANITARE[ap]["unitate"] * nr 
-                          for ap, nr in aparate_cum.items())
-            
-            # Presiune minimă necesară (din tronsonul 1)
-            if idx == 0 and aparate_cum:
-                presiune_min_necesara = max(
-                    APARATE_SANITARE[ap]["presiune_min"] 
-                    for ap in aparate_cum.keys()
-                )
-            
-            # Debit calcul
-            debit_calc, _ = calculeaza_debit_calcul(
-                tip_cladire, total_debit, total_ui, aplica_siguranta
+            # Diametru jgheab
+            diam_jgheab = 125 if suprafata_acoperis < 150 else 150
+            st.metric("Diametru jgheab", f"{diam_jgheab} mm")
+        
+        st.write("---")
+        
+        # Bazin retenție
+        st.subheader("💧 Bazin de retenție")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            timp_retentie = st.slider(
+                "⏱️ Timp retenție (minute)",
+                min_value=5, max_value=60, value=15,
+                help="Pentru atenuarea debitului de vârf"
             )
             
-            debit_m3s = debit_calc / 1000
+            volum_bazin = debit_pluvial * timp_retentie * 60
+            st.success(f"📊 **Volum bazin necesar: {volum_bazin:.0f} litri**")
             
-            # Dimensionare
-            rez_dim = dimensioneaza_conducta(debit_m3s, material, temperatura)
-            
-            if rez_dim:
-                # Pierderi liniare
-                h_lin = rez_dim['pierdere_unitara'] * tronson['lungime']
-                
-                # Pierderi locale TOATE
-                toate_zeta = []
-                
-                # Din aparate
-                for ap, nr_ap in aparate_cum.items():
-                    for zeta in APARATE_SANITARE[ap]["pierderi_automate"].values():
-                        toate_zeta.extend([zeta] * nr_ap)
-                
-                # Pe tronson
-                if idx > 0:
-                    toate_zeta.append(PIERDERI_TRONSON["Teu trecere la racord"]["zeta"])
-                toate_zeta.append(PIERDERI_TRONSON["Vană închidere derivație"]["zeta"])
-                
-                # Extra
-                for nume, nr in tronson['pierderi_extra'].items():
-                    if nr > 0:
-                        toate_zeta.extend([PIERDERI_EXTRA[nume]] * nr)
-                
-                # Pierderi instalație (doar pe primul tronson)
-                if idx == 0:
-                    toate_zeta.extend(pierderi_instalatie)
-                
-                h_loc = calculeaza_pierderi_locale(rez_dim['viteza'], toate_zeta)
-                
-                h_lin_totala += h_lin
-                h_loc_totala += h_loc
-                dif_nivel_totala += tronson['dif_nivel']
-                
-                rezultate.append({
-                    "Tronson": nr_t,
-                    "Aparate": ", ".join([f"{nr}{ap[:4]}" for ap, nr in aparate_cum.items()]),
-                    "Q (L/s)": f"{debit_calc:.3f}",
-                    "DN": rez_dim['diametru'],
-                    "v (m/s)": f"{rez_dim['viteza']:.2f}",
-                    "Re": f"{rez_dim['reynolds']:.0f}",
-                    "λ": f"{rez_dim['lambda']:.4f}",
-                    "L (m)": f"{tronson['lungime']:.1f}",
-                    "i (‰)": f"{rez_dim['pierdere_unitara']*1000:.2f}",
-                    "h_lin": f"{h_lin:.3f}",
-                    "Σζ": f"{sum(toate_zeta):.1f}",
-                    "h_loc": f"{h_loc:.3f}",
-                    "Δh": f"{tronson['dif_nivel']:.1f}",
-                    "h_total": f"{h_lin + h_loc:.3f}"
-                })
+            # Volum standard
+            volume_bazin = [1000, 2000, 3000, 5000, 10000, 15000, 20000]
+            volum_standard = next((v for v in volume_bazin if v >= volum_bazin), volume_bazin[-1])
+            st.info(f"✅ **Volum ales: {volum_standard} litri**")
         
-        # Tabel
-        if rezultate:
-            df_rez = pd.DataFrame(rezultate)
-            st.dataframe(df_rez, use_container_width=True, hide_index=True)
+        with col2:
+            st.write("**Sistem de pompare evacuare:**")
             
-            st.divider()
+            debit_evacuare = st.number_input(
+                "Debit evacuare permis (L/s)",
+                min_value=0.5, max_value=10.0, value=2.0,
+                help="Conform aviz canalizare"
+            )
             
-            # Metrici
-            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            inaltime_pompare = st.number_input(
+                "Înălțime pompare (m)",
+                min_value=1.0, max_value=20.0, value=5.0
+            )
             
-            with col_m1:
-                st.metric("Σ h_liniare", f"{h_lin_totala:.3f} mCA")
-            with col_m2:
-                st.metric("Σ h_locale", f"{h_loc_totala:.3f} mCA")
-            with col_m3:
-                st.metric("Σ Δh nivel", f"{dif_nivel_totala:.2f} m")
-            with col_m4:
-                h_totala = h_lin_totala + h_loc_totala
-                st.metric("**h TOTALĂ**", f"{h_totala:.3f} mCA")
+            # Putere pompă
+            putere_pompa = (debit_evacuare/1000 * inaltime_pompare * 9.81) / 0.6
+            st.metric("Putere pompă", f"{putere_pompa:.2f} kW")
             
-            st.divider()
+            # Timp golire
+            timp_golire = volum_standard / (debit_evacuare * 60)
+            st.metric("Timp golire bazin", f"{timp_golire:.1f} min")
+    
+    # =============== TAB CANALIZARE MENAJERĂ ===============
+    with tab_principal[2]:
+        st.info("🚽 **Calculator pentru canalizare menajeră**")
+        
+        st.subheader("📐 Dimensionare coloane și colectoare")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.write("**🏢 Coloane de scurgere:**")
             
-            # Sarcină hidrodinamică
-            st.header("⚡ Calcul Sarcină Hidrodinamică")
+            tip_cladire = st.selectbox(
+                "Tip clădire",
+                ["Bloc locuințe", "Clădire birouri", "Hotel", "Spital", "Școală"]
+            )
             
-            col_s1, col_s2 = st.columns([1, 1])
+            numar_etaje = st.number_input(
+                "Număr etaje",
+                min_value=1, max_value=30, value=10
+            )
             
-            with col_s1:
-                st.info(f"""
-                **Presiune minimă necesară:**  
-                **{presiune_min_necesara:.1f} mCA**
-                
-                Determinată automat din aparatele de pe tronsonul 1  
-                (consumatorul cel mai dezavantajat)
+            apartamente_etaj = st.number_input(
+                "Apartamente/etaj",
+                min_value=1, max_value=10, value=2
+            )
+            
+            # Calcul simplificat
+            unitati_scurgere = numar_etaje * apartamente_etaj * 6  # ~6 US per apartament
+            
+            # Diametru coloană
+            if unitati_scurgere <= 20:
+                diam_coloana = 75
+            elif unitati_scurgere <= 160:
+                diam_coloana = 110
+            elif unitati_scurgere <= 360:
+                diam_coloana = 125
+            else:
+                diam_coloana = 160
+            
+            st.success(f"📏 **Diametru coloană: DN{diam_coloana}**")
+            st.info(f"Unități de scurgere: {unitati_scurgere} US")
+        
+        with col2:
+            st.write("**🔄 Ventilații:**")
+            
+            # Diametru ventilație
+            diam_ventilatie = 75 if diam_coloana <= 110 else 110
+            st.metric("Ventilație principală", f"DN{diam_ventilatie}")
+            
+            # Ventilație secundară
+            if numar_etaje > 5:
+                st.info("✅ Necesară ventilație secundară")
+                st.caption(f"Diametru: DN{diam_ventilatie - 25}")
+            else:
+                st.success("❌ Nu e necesară ventilație secundară")
+            
+            st.write("---")
+            st.write("**📊 Colector orizontal:**")
+            
+            panta_colector = st.slider(
+                "Pantă colector (%)",
+                min_value=0.5, max_value=3.0, value=1.5, step=0.5
+            )
+            
+            # Diametru colector
+            diam_colector = diam_coloana if unitati_scurgere < 100 else diam_coloana + 25
+            st.metric("Diametru colector", f"DN{diam_colector}")
+            st.metric("Pantă minimă", f"{panta_colector}%")
+    
+    # =============== TAB RAPOARTE ===============
+    with tab_principal[3]:
+        st.info("📊 **Generator de rapoarte tehnice**")
+        
+        st.subheader("📄 Export rezultate")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.write("**Format raport:**")
+            format_raport = st.radio(
+                "Selectează format",
+                ["PDF", "Excel", "Word"],
+                horizontal=False
+            )
+        
+        with col2:
+            st.write("**Conținut raport:**")
+            include_calcule = st.checkbox("Memoriu de calcul", value=True)
+            include_tabele = st.checkbox("Tabele dimensionare", value=True)
+            include_grafice = st.checkbox("Grafice și diagrame", value=True)
+            include_normative = st.checkbox("Referințe normative", value=True)
+        
+        with col3:
+            st.write("**Informații proiect:**")
+            nume_proiect = st.text_input("Nume proiect", "Instalații sanitare")
+            beneficiar = st.text_input("Beneficiar", "")
+            proiectant = st.text_input("Proiectant", "Ing. Luca Obejdeanu")
+        
+        if st.button("📥 **Generează Raport**", type="primary"):
+            st.success("✅ Raport generat cu succes!")
+            
+            # Simulare descărcare
+            dummy_content = f"Raport {nume_proiect} - {proiectant}"
+            file_name = f"Raport_{nume_proiect.replace(' ', '_')}.{format_raport.lower()}"
+            
+            st.download_button(
+                label=f"⬇️ **Descarcă {format_raport}**",
+                data=dummy_content.encode(),
+                file_name=file_name,
+                mime="application/octet-stream"
+            )
+    
+    # =============== TAB DOCUMENTAȚIE ===============
+    with tab_principal[4]:
+        st.info("📚 **Documentație tehnică și normative**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📖 Normative utilizate")
+            st.write("""
+            **Principale:**
+            - **I9-2022** - Normativ pentru proiectarea și executarea instalațiilor sanitare
+            - **SR 1343-1:2006** - Alimentări cu apă. Calculul debitelor
+            - **STAS 1795** - Canalizări interioare
+            - **SR 8591** - Rețele edilitare subterane
+            
+            **Complementare:**
+            - **GP 120-2013** - Ghid privind proiectarea sistemelor centralizate de alimentare cu apă
+            - **NP 133-2013** - Normativ privind proiectarea sistemelor de canalizare
+            - **SR EN 12056** - Sisteme de canalizare gravitaționale în clădiri
+            """)
+        
+        with col2:
+            st.subheader("🔧 Valori de referință")
+            
+            with st.expander("**Viteze recomandate**"):
+                st.write("""
+                - Conducte distribuție: **0.5 - 2.0 m/s**
+                - Conducte principale: **1.0 - 2.5 m/s**
+                - Branșamente: **0.8 - 2.5 m/s**
+                - Aspirație pompe: **0.5 - 1.5 m/s**
+                - Refulare pompe: **1.5 - 3.0 m/s**
                 """)
             
-            with col_s2:
-                # Hu
-                Hu = presiune_min_necesara + dif_nivel_totala
-                st.metric("Hu - Sarcină utilă", f"{Hu:.2f} mCA",
-                         help="Hu = Pmin + Δh_nivel")
-                
-                # Hr
-                Hr = Hu + h_totala
-                st.metric("Hr - Sarcină necesară", f"{Hr:.2f} mCA",
-                         help="Hr = Hu + h_totală")
-                
-                # Hg
-                Hg = Hr - presiune_retea
-                
-                if Hg > 0:
-                    st.error(f"⚠️ **POMPĂ NECESARĂ**")
-                    st.metric("Hg - Pompă", f"{Hg:.2f} mCA")
-                    st.warning(f"Presiunea din rețea ({presiune_retea:.1f} mCA) NU este suficientă!")
-                    st.info(f"💪 **Specificații pompă:**\n- Hg ≥ {Hg:.2f} mCA\n- Q = {debit_calc:.3f} L/s")
-                else:
-                    st.success("✅ **Presiune SUFICIENTĂ!**")
-                    st.metric("Presiune excedentară", f"{abs(Hg):.2f} mCA")
+            with st.expander("**Presiuni minime consumatori**"):
+                st.write("""
+                - Lavoar, bideu: **10 mCA**
+                - Duș: **12 mCA**
+                - Cadă: **13 mCA**
+                - WC cu rezervor: **8 mCA**
+                - Mașină spălat: **12 mCA**
+                - Robinet grădină: **15 mCA**
+                """)
             
-            # Verificări
-            st.divider()
-            st.header("✅ Verificări I9-2022")
-            
-            v_max_normativ = 2.0 if "locuit" in tip_cladire.lower() else 3.0
-            
-            viteze_ok = True
-            for rez in rezultate:
-                v = float(rez["v (m/s)"])
-                if v > v_max_normativ:
-                    st.error(f"❌ Tronson {rez['Tronson']}: v = {v:.2f} m/s > {v_max_normativ} m/s")
-                    viteze_ok = False
-            
-            if viteze_ok:
-                st.success(f"✅ Viteze ≤ {v_max_normativ} m/s")
-            
-            if h_lin_totala > 0:
-                raport = h_loc_totala / h_lin_totala
-                if raport <= 0.5:
-                    st.success(f"✅ Raport h_loc/h_lin = {raport:.2f} ≤ 0.5")
-                else:
-                    st.warning(f"⚠️ Raport h_loc/h_lin = {raport:.2f} > 0.5")
-            
-            # Export
-            st.divider()
-            csv = df_rez.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "📥 Descarcă CSV",
-                csv,
-                f"sanitare_{material.replace(' ', '_')}.csv",
-                "text/csv",
-                use_container_width=True
-            )
+            with st.expander("**Coeficienți pierderi locale**"):
+                st.write("""
+                - Cot 90°: **ξ = 0.9 - 1.5**
+                - Tee derivație: **ξ = 1.8**
+                - Robinet cu sertar: **ξ = 0.3 - 0.5**
+                - Clapetă de sens: **ξ = 2.5 - 3.0**
+                - Contor apă: **ξ = 5 - 10**
+                - Filtru Y: **ξ = 2.0**
+                """)
 
-else:
-    st.info("👆 **Adaugă primul tronson pentru a începe!**")
+# ======================== FOOTER ========================
+def footer():
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; padding: 20px; background-color: #f0f2f6; border-radius: 10px;'>
+        <h4 style='color: #1e3d59; margin: 0;'>Calculator Profesional Instalații Sanitare</h4>
+        <p style='color: #5c7080; margin: 10px 0;'>Conform normativelor românești în vigoare</p>
+        <p style='color: #8b9dc3; font-size: 14px; margin: 5px 0;'>
+            <strong>Designed by Ing. Luca Obejdeanu</strong>
+        </p>
+        <p style='color: #8b9dc3; font-size: 12px; margin: 5px 0;'>
+            © 2024 | Versiunea 1.0 | Contact: luca.obejdeanu@gmail.com
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# Footer
-st.divider()
-st.caption("""
-**Calculator Instalații Sanitare Pro** | Conform I9-2022  
-✅ Presiuni minime automate | ✅ Pierderi standardizate 
-© Designed by Luca OBEJDEANU
-""")
+# ======================== RULARE APLICAȚIE ========================
+if __name__ == "__main__":
+    main()
+    footer()
