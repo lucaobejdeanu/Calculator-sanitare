@@ -1,9 +1,21 @@
-# Requirements pentru Calculator Sanitare v6
+# Requirements pentru Calculator Sanitare v2.0 (Versiunea Corectă)
 # Instalare: pip3 install -r requirements.txt
 
+# Core
 streamlit>=1.28.0
 pandas>=2.0.0
 numpy>=1.24.0
+
+# Vizualizare
 plotly>=5.17.0
+
+# Export Excel
 openpyxl>=3.1.0
 xlsxwriter>=3.1.0
+
+# Export PDF REAL
+reportlab>=4.0.0
+
+# Optional pentru grafice avansate
+matplotlib>=3.7.0
+seaborn>=0.12.0
