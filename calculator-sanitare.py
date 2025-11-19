@@ -278,14 +278,50 @@ def main():
     # ======================== TAB ARM ========================
     with tab_arm:
         st.subheader("💧 Dimensionare Tronsoane ARM")
-        
+
+        # Afișare tronsoane existente în carduri
+        if st.session_state.tronsoane_arm:
+            st.markdown("### 📋 Tronsoane Definite")
+
+            for idx, tronson in enumerate(st.session_state.tronsoane_arm):
+                with st.container():
+                    col_info, col_delete = st.columns([5, 1])
+
+                    with col_info:
+                        st.markdown(f"""
+                        <div style='background-color: #e3f2fd; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid #2196f3;'>
+                            <h4 style='margin: 0; color: #1976d2;'>🔹 Tronson {tronson['nr']}</h4>
+                            <p style='margin: 0.5rem 0;'><strong>Lungime:</strong> {tronson['lungime']} m | <strong>Σ ζ:</strong> {tronson['suma_zeta']:.1f}</p>
+                            <p style='margin: 0;'><strong>Obiecte sanitare:</strong> {', '.join([f'{cons} ({cant}×)' for cons, cant in tronson['consumatori'].items()])}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    with col_delete:
+                        if st.button("🗑️", key=f"delete_arm_{idx}", help="Șterge tronson"):
+                            st.session_state.tronsoane_arm.pop(idx)
+                            # Renumerotare tronsoane
+                            for i, t in enumerate(st.session_state.tronsoane_arm):
+                                t['nr'] = i + 1
+                            st.rerun()
+
+            st.markdown("---")
+
         # Formular nou tronson
         with st.expander("➕ Adaugă Tronson NOU", expanded=len(st.session_state.tronsoane_arm) == 0):
+            st.info("ℹ️ **Introduceți doar obiectele sanitare pentru acest tronson specific** (nu toate din sistem)")
+
+            # Nume tronson
+            nume_tronson = st.text_input(
+                "Nume tronson (opțional)",
+                value=f"Tronson {len(st.session_state.tronsoane_arm) + 1}",
+                key="arm_new_nume"
+            )
+
             st.write("**Selectează consumatorii pentru acest tronson:**")
-            
+
             consumatori_tronson = {}
             cols = st.columns(3)
-            
+
             for idx, (nume, date) in enumerate(CONSUMATORI.items()):
                 with cols[idx % 3]:
                     cant = st.number_input(
@@ -295,31 +331,32 @@ def main():
                     )
                     if cant > 0:
                         consumatori_tronson[nume] = cant
-            
+
             col1, col2, col3 = st.columns(3)
-            
+
             with col1:
                 lungime_tronson = st.number_input(
-                    "Lungime tronson (m)", 
+                    "Lungime tronson (m)",
                     min_value=0.1, max_value=100.0, value=5.0,
                     key="arm_new_lungime"
                 )
-            
+
             with col2:
                 nr_coturi = st.number_input("Coturi 90° (ζ=1.0)", 0, 20, 2, key="arm_new_cot")
                 nr_tee = st.number_input("Tee-uri (ζ=1.8)", 0, 20, 1, key="arm_new_tee")
-            
+
             with col3:
                 nr_robineti = st.number_input("Robinete (ζ=0.5)", 0, 20, 1, key="arm_new_rob")
                 nr_clapete = st.number_input("Clapete (ζ=2.5)", 0, 10, 0, key="arm_new_clap")
-            
+
             suma_zeta = nr_coturi * 1.0 + nr_tee * 1.8 + nr_robineti * 0.5 + nr_clapete * 2.5
             st.info(f"Σ ζ = {suma_zeta:.1f}")
-            
+
             if st.button("✅ Adaugă Tronson ARM", type="primary"):
                 if consumatori_tronson:
                     tronson = {
                         "nr": len(st.session_state.tronsoane_arm) + 1,
+                        "nume": nume_tronson,
                         "consumatori": consumatori_tronson,
                         "lungime": lungime_tronson,
                         "suma_zeta": suma_zeta
@@ -472,19 +509,55 @@ def main():
     # ======================== TAB ACM ========================
     with tab_acm:
         st.subheader("🔥 Dimensionare Tronsoane ACM")
-        
+
         # Similar cu ARM dar pentru ACM
         # Consumatori ACM (doar cei care folosesc apă caldă)
-        consumatori_acm = {k: v for k, v in CONSUMATORI.items() 
-                          if k in ["Lavoar", "Bideu", "Duș", "Cadă < 150L", "Cadă > 150L", 
+        consumatori_acm = {k: v for k, v in CONSUMATORI.items()
+                          if k in ["Lavoar", "Bideu", "Duș", "Cadă < 150L", "Cadă > 150L",
                                   "Spălător vase", "MSV", "MSR"]}
-        
+
+        # Afișare tronsoane existente în carduri
+        if st.session_state.tronsoane_acm:
+            st.markdown("### 📋 Tronsoane Definite ACM")
+
+            for idx, tronson in enumerate(st.session_state.tronsoane_acm):
+                with st.container():
+                    col_info, col_delete = st.columns([5, 1])
+
+                    with col_info:
+                        st.markdown(f"""
+                        <div style='background-color: #ffebee; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid #f44336;'>
+                            <h4 style='margin: 0; color: #c62828;'>🔹 Tronson {tronson['nr']}</h4>
+                            <p style='margin: 0.5rem 0;'><strong>Lungime:</strong> {tronson['lungime']} m | <strong>Σ ζ:</strong> {tronson['suma_zeta']:.1f}</p>
+                            <p style='margin: 0;'><strong>Obiecte sanitare:</strong> {', '.join([f'{cons} ({cant}×)' for cons, cant in tronson['consumatori'].items()])}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    with col_delete:
+                        if st.button("🗑️", key=f"delete_acm_{idx}", help="Șterge tronson"):
+                            st.session_state.tronsoane_acm.pop(idx)
+                            # Renumerotare tronsoane
+                            for i, t in enumerate(st.session_state.tronsoane_acm):
+                                t['nr'] = i + 1
+                            st.rerun()
+
+            st.markdown("---")
+
         with st.expander("➕ Adaugă Tronson NOU ACM", expanded=len(st.session_state.tronsoane_acm) == 0):
+            st.info("ℹ️ **Introduceți doar obiectele sanitare pentru acest tronson specific** (nu toate din sistem)")
+
+            # Nume tronson
+            nume_tronson_acm = st.text_input(
+                "Nume tronson (opțional)",
+                value=f"Tronson {len(st.session_state.tronsoane_acm) + 1}",
+                key="acm_new_nume"
+            )
+
             st.write("**Selectează consumatorii pentru acest tronson:**")
-            
+
             consumatori_tronson_acm = {}
             cols = st.columns(3)
-            
+
             for idx, (nume, date) in enumerate(consumatori_acm.items()):
                 with cols[idx % 3]:
                     cant = st.number_input(
@@ -494,31 +567,32 @@ def main():
                     )
                     if cant > 0:
                         consumatori_tronson_acm[nume] = cant
-            
+
             col1, col2, col3 = st.columns(3)
-            
+
             with col1:
                 lungime_tronson_acm = st.number_input(
-                    "Lungime tronson (m)", 
+                    "Lungime tronson (m)",
                     min_value=0.1, max_value=100.0, value=5.0,
                     key="acm_new_lungime"
                 )
-            
+
             with col2:
                 nr_coturi_acm = st.number_input("Coturi 90° (ζ=1.0)", 0, 20, 2, key="acm_new_cot")
                 nr_tee_acm = st.number_input("Tee-uri (ζ=1.8)", 0, 20, 1, key="acm_new_tee")
-            
+
             with col3:
                 nr_robineti_acm = st.number_input("Robinete (ζ=0.5)", 0, 20, 1, key="acm_new_rob")
                 nr_clapete_acm = st.number_input("Clapete (ζ=2.5)", 0, 10, 1, key="acm_new_clap")
-            
+
             suma_zeta_acm = nr_coturi_acm * 1.0 + nr_tee_acm * 1.8 + nr_robineti_acm * 0.5 + nr_clapete_acm * 2.5
             st.info(f"Σ ζ = {suma_zeta_acm:.1f}")
-            
+
             if st.button("✅ Adaugă Tronson ACM", type="primary"):
                 if consumatori_tronson_acm:
                     tronson_acm = {
                         "nr": len(st.session_state.tronsoane_acm) + 1,
+                        "nume": nume_tronson_acm,
                         "consumatori": consumatori_tronson_acm,
                         "lungime": lungime_tronson_acm,
                         "suma_zeta": suma_zeta_acm
